@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -15,6 +15,8 @@ import '@xyflow/react/dist/style.css';
 import CentralNode from './CentralNode';
 import SubNode from './SubNode';
 import AdjacentNode from './AdjacentNode';
+import TreeHeader from './TreeHeader';
+import { useToast } from '@/hooks/use-toast';
 
 const nodeTypes = {
   central: CentralNode,
@@ -121,33 +123,79 @@ const initialEdges: Edge[] = [
 const KnowledgeTree = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [searchQuery, setSearchQuery] = useState('');
+  const { toast } = useToast();
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges],
   );
 
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    // TODO: Implement search functionality
+    if (query) {
+      toast({
+        title: "Search initiated",
+        description: `Searching for: ${query}`,
+      });
+    }
+  };
+
+  const handleAddNote = () => {
+    toast({
+      title: "Add new note",
+      description: "Opening note editor...",
+    });
+    // TODO: Implement add note functionality
+  };
+
+  const handleNodeAction = (nodeId: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    toast({
+      title: "Node action",
+      description: `Opened actions for: ${node?.data.label}`,
+    });
+    // TODO: Implement node action menu
+  };
+
   return (
-    <div className="w-full h-screen bg-tree-background">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        className="bg-tree-background"
-        proOptions={{ hideAttribution: true }}
-      >
-        <Controls className="bg-card border border-border" />
-        <Background 
-          color="hsl(var(--tree-connection))" 
-          size={1} 
-          className="opacity-10"
-        />
-      </ReactFlow>
+    <div className="w-full h-screen bg-tree-background relative">
+      {/* Header with search and add button */}
+      <TreeHeader 
+        onSearch={handleSearch}
+        onAddNote={handleAddNote}
+        searchQuery={searchQuery}
+      />
+      {/* ReactFlow Tree */}
+      <div className="pt-20 h-full">
+        <ReactFlow
+          nodes={nodes.map(node => ({
+            ...node,
+            data: {
+              ...node.data,
+              onNodeAction: handleNodeAction,
+              id: node.id
+            }
+          }))}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+          className="bg-tree-background"
+          proOptions={{ hideAttribution: true }}
+        >
+          <Controls className="bg-card border border-border" />
+          <Background 
+            color="hsl(var(--tree-connection))" 
+            size={1} 
+            className="opacity-10"
+          />
+        </ReactFlow>
+      </div>
     </div>
   );
 };
