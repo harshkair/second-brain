@@ -61,6 +61,13 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				tree: {
+					background: 'hsl(var(--tree-background))',
+					connection: 'hsl(var(--tree-connection))',
+					central: 'hsl(var(--node-central))',
+					sub: 'hsl(var(--node-sub))',
+					adjacent: 'hsl(var(--node-adjacent))'
 				}
 			},
 			borderRadius: {
