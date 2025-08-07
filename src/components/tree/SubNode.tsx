@@ -7,6 +7,7 @@ interface SubNodeProps {
   data: {
     label: string;
     type?: string;
+    imageUrl?: string;
   };
   onNodeAction?: (nodeId: string) => void;
   id?: string;
@@ -32,6 +33,14 @@ const SubNode = memo(({ data, onNodeAction, id }: SubNodeProps) => {
         <h3 className="text-lg font-semibold text-tree-sub mb-1">{data.label}</h3>
         {data.type && (
           <span className="text-xs text-muted-foreground uppercase tracking-wide">{data.type}</span>
+        )}
+        {data.imageUrl && (
+          <img
+            src={data.imageUrl}
+            alt={data.label}
+            style={{ maxWidth: '100%', maxHeight: 120, borderRadius: 8, margin: '8px auto' }}
+            loading="lazy"
+          />
         )}
       </div>
     </div>

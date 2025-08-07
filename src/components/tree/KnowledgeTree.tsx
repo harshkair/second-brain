@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -17,6 +17,10 @@ import SubNode from './SubNode';
 import AdjacentNode from './AdjacentNode';
 import TreeHeader from './TreeHeader';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog } from '@/components/ui/dialog';
+import AddNoteModal from './AddNoteModal';
+import EditNoteModal from './EditNoteModal';
+import { fetchNotes, addNote, updateNote } from '@/api/notes';
 
 const nodeTypes = {
   central: CentralNode,
@@ -121,10 +125,122 @@ const initialEdges: Edge[] = [
 ];
 
 const KnowledgeTree = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]); // Start empty
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
+  const [isAddNoteOpen, setAddNoteOpen] = useState(false);
+  const [isEditNoteOpen, setEditNoteOpen] =  useState(false);
+  const [editingNode, setEditingNode] = useState<Node | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch notes from backend on mount
+  useEffect(() => {
+    setLoading(true);
+    fetchNotes()
+      .then(fetchedNotes => {
+        setNodes(fetchedNotes.map(note => ({
+          id: note._id,
+          type: 'sub',
+          position: note.position || { x: 400, y: 350 },
+          data: {
+            label: note.name,
+            description: note.content,
+            color: note.color,
+            tag: note.tag,
+            imageUrl: note.imageUrl,
+            type: 'subtopic',
+          },
+        })));
+        setLoading(false);
+      })
+      .catch(err => {
+        setError('Failed to fetch notes');
+        setLoading(false);
+      });
+  }, []);
+
+  // Add note handler
+  const handleAddNoteSubmit = async (data: { name: string; content: string; color: string; tag: string; imageUrl?: string }) => {
+    setLoading(true);
+    try {
+      const note = await addNote({
+        name: data.name,
+        content: data.content,
+        color: data.color,
+        tag: data.tag,
+        imageUrl: data.imageUrl,
+        position: { x: 400, y: 350 + nodes.length * 40 },
+      });
+      setNodes(prev => ([
+        ...prev,
+        {
+          id: note._id,
+          type: 'sub',
+          position: note.position || { x: 400, y: 350 },
+          data: {
+            label: note.name,
+            description: note.content,
+            color: note.color,
+            tag: note.tag,
+            imageUrl: note.imageUrl,
+            type: 'subtopic',
+          },
+        },
+      ]));
+      setAddNoteOpen(false);
+      toast({ title: 'Note added', description: `Note "${data.name}" was added.` });
+    } catch (err) {
+      setError('Failed to add note');
+    }
+    setLoading(false);
+  };
+
+  // Edit note handler
+  const handleEditNoteSubmit = async (data: { name: string; content: string; color: string; tag: string; imageUrl?: string }) => {
+    if (!editingNode) return;
+    setLoading(true);
+    try {
+      const note = await updateNote(editingNode.id, {
+        name: data.name,
+        content: data.content,
+        color: data.color,
+        tag: data.tag,
+        imageUrl: data.imageUrl,
+        position: editingNode.position,
+      });
+      setNodes(prev => prev.map(node =>
+        node.id === editingNode.id
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                label: note.name,
+                description: note.content,
+                color: note.color,
+                tag: note.tag,
+                imageUrl: note.imageUrl,
+              },
+            }
+          : node
+      ));
+      setEditNoteOpen(false);
+      setEditingNode(null);
+      toast({ title: 'Note updated', description: `Note "${data.name}" was updated.` });
+    } catch (err) {
+      setError('Failed to update note');
+    }
+    setLoading(false);
+  };
+
+  const handleEditNode = (nodeId: string) =>{
+    const node = nodes.find(n => n.id === nodeId)
+    if (node){
+      setEditingNode(node);
+      setEditNoteOpen(true);
+    }
+  };
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -143,11 +259,7 @@ const KnowledgeTree = () => {
   };
 
   const handleAddNote = () => {
-    toast({
-      title: "Add new note",
-      description: "Opening note editor...",
-    });
-    // TODO: Implement add note functionality
+    setAddNoteOpen(true);
   };
 
   const handleNodeAction = (nodeId: string) => {
@@ -167,6 +279,25 @@ const KnowledgeTree = () => {
         onAddNote={handleAddNote}
         searchQuery={searchQuery}
       />
+      {/* Add Note Modal */}
+      <Dialog open={isAddNoteOpen} onOpenChange={setAddNoteOpen}>
+        <AddNoteModal onClose={() => setAddNoteOpen(false)} onAddNote={handleAddNoteSubmit} />
+      </Dialog>
+      {/* Edit Note Modal */}
+      {editingNode && (
+        <Dialog open={isEditNoteOpen} onOpenChange={setEditNoteOpen}>
+          <EditNoteModal
+            onClose={() => setEditNoteOpen(false)}
+            onEditNote={handleEditNoteSubmit}
+            initialValues={{
+              name: editingNode.data.label,
+              content: editingNode.data.description,
+              color: editingNode.data.color || 'red',
+              tag: editingNode.data.tag || '',
+            }}
+          />
+        </Dialog>
+      )}
       {/* ReactFlow Tree */}
       <div className="pt-20 h-full">
         <ReactFlow
@@ -175,6 +306,7 @@ const KnowledgeTree = () => {
             data: {
               ...node.data,
               onNodeAction: handleNodeAction,
+              onEdit: handleEditNode, // Pass the edit handler
               id: node.id
             }
           }))}
