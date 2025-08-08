@@ -1,6 +1,8 @@
+import { Note, CreateNoteRequest, UpdateNoteRequest, UploadResponse } from '../types/Note';
+
 const API_URL = 'http://localhost:5000'; // Change if deploying
 
-export async function fetchNotes() {
+export async function fetchNotes(): Promise<Note[]> {
   const res = await fetch(`${API_URL}/notes`);
   if (!res.ok) throw new Error('Failed to fetch notes');
   return res.json();
@@ -14,11 +16,11 @@ export async function uploadImage(file: File): Promise<string> {
     body: formData,
   });
   if (!res.ok) throw new Error('Image upload failed');
-  const data = await res.json();
+  const data: UploadResponse = await res.json();
   return data.url;
 }
 
-export async function addNote(note: any) {
+export async function addNote(note: CreateNoteRequest): Promise<Note> {
   const res = await fetch(`${API_URL}/notes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -28,7 +30,7 @@ export async function addNote(note: any) {
   return res.json();
 }
 
-export async function updateNote(id: string, note: any) {
+export async function updateNote(id: string, note: UpdateNoteRequest): Promise<Note> {
   const res = await fetch(`${API_URL}/notes/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -38,7 +40,7 @@ export async function updateNote(id: string, note: any) {
   return res.json();
 }
 
-export async function deleteNote(id: string) {
+export async function deleteNote(id: string): Promise<{ message: string }> {
   const res = await fetch(`${API_URL}/notes/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete note');
   return res.json();

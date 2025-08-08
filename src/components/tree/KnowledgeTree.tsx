@@ -140,10 +140,13 @@ const KnowledgeTree = () => {
     setLoading(true);
     fetchNotes()
       .then(fetchedNotes => {
-        setNodes(fetchedNotes.map(note => ({
+        console.log('Fetched notes:', fetchedNotes); // Debug log
+        setNodes(fetchedNotes.map((note, index) => ({
           id: note._id,
           type: 'sub',
-          position: note.position || { x: 400, y: 350 },
+          position: note.position && typeof note.position.x === 'number' && typeof note.position.y === 'number' 
+            ? note.position 
+            : { x: 400, y: 350 + index * 60 },
           data: {
             label: note.name,
             description: note.content,
@@ -156,6 +159,7 @@ const KnowledgeTree = () => {
         setLoading(false);
       })
       .catch(err => {
+        console.error('Error fetching notes:', err);
         setError('Failed to fetch notes');
         setLoading(false);
       });
@@ -165,20 +169,30 @@ const KnowledgeTree = () => {
   const handleAddNoteSubmit = async (data: { name: string; content: string; color: string; tag: string; imageUrl?: string }) => {
     setLoading(true);
     try {
+      // Calculate position based on current nodes count
+      const newPosition = { 
+        x: 400, 
+        y: 350 + nodes.length * 60 
+      };
+      
       const note = await addNote({
         name: data.name,
         content: data.content,
         color: data.color,
         tag: data.tag,
         imageUrl: data.imageUrl,
-        position: { x: 400, y: 350 + nodes.length * 40 },
+        position: newPosition,
       });
+      
+      // Use the position returned from the server, or fallback to calculated position
+      const finalPosition = note.position || newPosition;
+      
       setNodes(prev => ([
         ...prev,
         {
           id: note._id,
           type: 'sub',
-          position: note.position || { x: 400, y: 350 },
+          position: finalPosition,
           data: {
             label: note.name,
             description: note.content,
@@ -247,6 +261,24 @@ const KnowledgeTree = () => {
     [setEdges],
   );
 
+  // Handle node position updates when nodes are dragged
+  const onNodeDragStop = useCallback(async (event: any, node: Node) => {
+    try {
+      // Update the node position in the database
+      await updateNote(node.id, {
+        position: node.position
+      });
+      console.log('Node position updated:', node.id, node.position);
+    } catch (err) {
+      console.error('Failed to update node position:', err);
+      toast({
+        title: "Position update failed",
+        description: "Could not save the new position",
+        variant: "destructive"
+      });
+    }
+  }, []);
+
   const handleSearch = (query: string) => {
     setSearchQuery(query);
     // TODO: Implement search functionality
@@ -273,6 +305,20 @@ const KnowledgeTree = () => {
 
   return (
     <div className="w-full h-screen bg-tree-background relative">
+      {/* Debug info - remove in production */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute top-0 right-0 z-50 bg-black/80 text-white p-2 text-xs max-w-xs">
+          <div>Nodes: {nodes.length}</div>
+          <div>Loading: {loading ? 'Yes' : 'No'}</div>
+          <div>Error: {error || 'None'}</div>
+          {nodes.length > 0 && (
+            <div>
+              First node position: {JSON.stringify(nodes[0].position)}
+            </div>
+          )}
+        </div>
+      )}
+      
       {/* Header with search and add button */}
       <TreeHeader 
         onSearch={handleSearch}
@@ -314,6 +360,7 @@ const KnowledgeTree = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           fitView
           fitViewOptions={{ padding: 0.2 }}

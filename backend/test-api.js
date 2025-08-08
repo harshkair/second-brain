@@ -5,7 +5,7 @@ import bodyParser from 'body-parser';
 import notesRouter from './routes/notes.js';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = 5001; // Different port for testing
 
 // Middleware
 app.use(cors());
@@ -20,17 +20,19 @@ mongoose.connect('mongodb://localhost:27017/second-brain', {
 const db = mongoose.connection;
 db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 db.once('open', () => {
-  console.log('Connected to MongoDB');
-});
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  console.log('Connected to MongoDB for API testing');
 });
 
 // Notes API
 app.use('/notes', notesRouter);
 
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'API server is running' });
+});
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`API test server running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Notes API: http://localhost:${PORT}/notes`);
 });
