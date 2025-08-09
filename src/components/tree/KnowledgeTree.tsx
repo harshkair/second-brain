@@ -20,7 +20,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog } from '@/components/ui/dialog';
 import AddNoteModal from './AddNoteModal';
 import EditNoteModal from './EditNoteModal';
-import { fetchNotes, addNote, updateNote } from '@/api/notes';
+import DeleteConfirmationDialog from './DeleteConfirmationDialog';
+import { fetchNotes, addNote, updateNote, deleteNote } from '@/api/notes';
 
 const nodeTypes = {
   central: CentralNode,
@@ -132,6 +133,8 @@ const KnowledgeTree = () => {
   const [isAddNoteOpen, setAddNoteOpen] = useState(false);
   const [isEditNoteOpen, setEditNoteOpen] =  useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deletingNode, setDeletingNode] = useState<Node | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -248,13 +251,7 @@ const KnowledgeTree = () => {
     setLoading(false);
   };
 
-  const handleEditNode = (nodeId: string) =>{
-    const node = nodes.find(n => n.id === nodeId)
-    if (node){
-      setEditingNode(node);
-      setEditNoteOpen(true);
-    }
-  };
+
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -294,13 +291,52 @@ const KnowledgeTree = () => {
     setAddNoteOpen(true);
   };
 
-  const handleNodeAction = (nodeId: string) => {
+  const handleEditNode = (nodeId: string) => {
+    console.log('Edit node triggered for:', nodeId); // Debug log
     const node = nodes.find(n => n.id === nodeId);
-    toast({
-      title: "Node action",
-      description: `Opened actions for: ${node?.data.label}`,
-    });
-    // TODO: Implement node action menu
+    if (node) {
+      console.log('Opening edit modal for node:', node.data.label); // Debug log
+      setEditingNode(node);
+      setEditNoteOpen(true);
+    }
+  };
+
+  const handleDeleteNode = (nodeId: string) => {
+    console.log('Delete node triggered for:', nodeId); // Debug log
+    const node = nodes.find(n => n.id === nodeId);
+    if (node) {
+      console.log('Opening delete dialog for node:', node.data.label); // Debug log
+      setDeletingNode(node);
+      setIsDeleteDialogOpen(true);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingNode) return;
+    
+    setLoading(true);
+    try {
+      await deleteNote(deletingNode.id);
+      
+      // Remove the node from the local state
+      setNodes(prev => prev.filter(node => node.id !== deletingNode.id));
+      
+      toast({ 
+        title: 'Note deleted', 
+        description: `Note "${deletingNode.data.label}" was deleted.` 
+      });
+      
+      setIsDeleteDialogOpen(false);
+      setDeletingNode(null);
+    } catch (err) {
+      setError('Failed to delete note');
+      toast({
+        title: "Delete failed",
+        description: "Could not delete the note",
+        variant: "destructive"
+      });
+    }
+    setLoading(false);
   };
 
   return (
@@ -344,6 +380,17 @@ const KnowledgeTree = () => {
           />
         </Dialog>
       )}
+      
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setDeletingNode(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        noteName={deletingNode?.data.label || ''}
+      />
       {/* ReactFlow Tree */}
       <div className="pt-20 h-full">
         <ReactFlow
@@ -351,8 +398,8 @@ const KnowledgeTree = () => {
             ...node,
             data: {
               ...node.data,
-              onNodeAction: handleNodeAction,
-              onEdit: handleEditNode, // Pass the edit handler
+              onEdit: handleEditNode,
+              onDelete: handleDeleteNode,
               id: node.id
             }
           }))}
