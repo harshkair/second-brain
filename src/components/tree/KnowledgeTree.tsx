@@ -21,7 +21,15 @@ import { Dialog } from '@/components/ui/dialog';
 import AddNoteModal from './AddNoteModal';
 import EditNoteModal from './EditNoteModal';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
-import { fetchNotes, addNote, updateNote, deleteNote } from '@/api/notes';
+import { 
+  fetchNotes, 
+  addNote, 
+  updateNote, 
+  deleteNote,
+  fetchEdges,
+  createEdge,
+  deleteEdge
+} from '@/api/notes';
 
 const nodeTypes = {
   central: CentralNode,
@@ -29,7 +37,19 @@ const nodeTypes = {
   adjacent: AdjacentNode,
 };
 
-// Default position calculator for new nodes
+interface NodeData {
+  label: string;
+  description?: string;
+  color?: string;
+  tag?: string;
+  imageUrl?: string;
+  type: string;
+  onEdit?: (nodeId: string) => void;
+  onDelete?: (nodeId: string) => void;
+  id?: string;
+  [key: string]: unknown;
+}
+
 const calculateDefaultPosition = (existingNodes: Node[]) => ({
   x: 400,
   y: 350 + existingNodes.length * 60
@@ -42,22 +62,29 @@ const KnowledgeTree = () => {
   const { toast } = useToast();
   const [isAddNoteOpen, setAddNoteOpen] = useState(false);
   const [isEditNoteOpen, setEditNoteOpen] = useState(false);
-  const [editingNode, setEditingNode] = useState<Node | null>(null);
+  const [editingNode, setEditingNode] = useState<Node<NodeData> | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [deletingNode, setDeletingNode] = useState<Node | null>(null);
+  const [deletingNode, setDeletingNode] = useState<Node<NodeData> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch notes from backend on mount
+  // Load notes and edges from backend on mount
   useEffect(() => {
-    const loadNotes = async () => {
+    const loadData = async () => {
       setLoading(true);
       setError(null);
       
       try {
-        const fetchedNotes = await fetchNotes();
-        console.log('Fetched notes:', fetchedNotes); // Debug log
+        // Load notes and edges in parallel
+        const [fetchedNotes, fetchedEdges] = await Promise.all([
+          fetchNotes(),
+          fetchEdges()
+        ]);
         
+        console.log('Fetched notes:', fetchedNotes);
+        console.log('Fetched edges:', fetchedEdges);
+        
+        // Transform notes to ReactFlow nodes
         const transformedNodes = fetchedNotes.map((note, index) => ({
           id: note._id,
           type: 'sub' as const,
@@ -76,13 +103,24 @@ const KnowledgeTree = () => {
           },
         }));
         
+        // Transform edges to ReactFlow edges
+        const transformedEdges = fetchedEdges.map(edge => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          style: edge.style,
+          type: edge.type,
+          animated: edge.animated,
+        }));
+        
         setNodes(transformedNodes);
+        setEdges(transformedEdges);
       } catch (err) {
-        console.error('Error fetching notes:', err);
-        setError('Failed to fetch notes');
+        console.error('Error loading data:', err);
+        setError('Failed to load notes and connections');
         toast({
           title: "Load failed",
-          description: "Could not load notes from database",
+          description: "Could not load notes and connections from database",
           variant: "destructive"
         });
       } finally {
@@ -90,8 +128,72 @@ const KnowledgeTree = () => {
       }
     };
 
-    loadNotes();
-  }, [setNodes, toast]);
+    loadData();
+  }, [setNodes, setEdges, toast]);
+
+  // Handle edge creation when user connects nodes
+  const onConnect = useCallback(async (params: Connection) => {
+    if (!params.source || !params.target) return;
+    
+    try {
+      // Create edge in database
+      const newEdge = await createEdge({
+        source: params.source,
+        target: params.target,
+        style: {
+          stroke: 'hsl(var(--tree-connection))',
+          strokeWidth: 2
+        },
+        type: 'default',
+        animated: false,
+        label: ''
+      });
+      
+      // Add edge to ReactFlow
+      setEdges((eds) => addEdge({
+        id: newEdge.id,
+        source: newEdge.source,
+        target: newEdge.target,
+        style: newEdge.style,
+        type: newEdge.type,
+        animated: newEdge.animated,
+      }, eds));
+      
+      toast({
+        title: "Connection created",
+        description: "Notes have been connected successfully"
+      });
+    } catch (err) {
+      console.error('Failed to create edge:', err);
+      toast({
+        title: "Connection failed",
+        description: err instanceof Error ? err.message : "Could not create connection",
+        variant: "destructive"
+      });
+    }
+  }, [setEdges, toast]);
+
+  // Handle edge deletion
+  const onEdgesDelete = useCallback(async (edgesToDelete: Edge[]) => {
+    try {
+      // Delete edges from database
+      await Promise.all(
+        edgesToDelete.map(edge => deleteEdge(edge.id))
+      );
+      
+      toast({
+        title: "Connection deleted",
+        description: "Connection has been removed"
+      });
+    } catch (err) {
+      console.error('Failed to delete edges:', err);
+      toast({
+        title: "Delete failed",
+        description: "Could not delete connection",
+        variant: "destructive"
+      });
+    }
+  }, [toast]);
 
   // Add note handler
   const handleAddNoteSubmit = async (data: { 
@@ -211,11 +313,6 @@ const KnowledgeTree = () => {
     }
   };
 
-  const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges],
-  );
-
   // Handle node position updates when nodes are dragged
   const onNodeDragStop = useCallback(async (event: any, node: Node) => {
     try {
@@ -235,7 +332,6 @@ const KnowledgeTree = () => {
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
-    // TODO: Implement search functionality with database
     if (query) {
       toast({
         title: "Search initiated",
@@ -277,11 +373,17 @@ const KnowledgeTree = () => {
     try {
       await deleteNote(deletingNode.id);
       
+      // Remove the node from local state
       setNodes(prev => prev.filter(node => node.id !== deletingNode.id));
+      
+      // Remove all edges connected to this node from local state
+      setEdges(prev => prev.filter(edge => 
+        edge.source !== deletingNode.id && edge.target !== deletingNode.id
+      ));
       
       toast({ 
         title: 'Note deleted', 
-        description: `Note "${deletingNode.data.label}" was deleted successfully.` 
+        description: `Note "${String(deletingNode.data.label || '')}" and its connections were deleted successfully.` 
       });
       
       setIsDeleteDialogOpen(false);
@@ -330,51 +432,41 @@ const KnowledgeTree = () => {
 
   return (
     <div className="w-full h-screen bg-tree-background relative">
-      {/* Debug info - remove in production */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="absolute bottom-0 right-0 z-50 bg-black/80 text-white p-2 text-xs max-w-xs">
+        <div className="absolute bottom-4 left-4 z-50 bg-black/80 text-white p-2 text-xs max-w-xs rounded">
           <div>Nodes: {nodes.length}</div>
+          <div>Edges: {edges.length}</div>
           <div>Loading: {loading ? 'Yes' : 'No'}</div>
           <div>Error: {error || 'None'}</div>
-          {nodes.length > 0 && (
-            <div>
-              First node position: {JSON.stringify(nodes[0].position)}
-            </div>
-          )}
         </div>
       )}
       
-      {/* Header with search and add button */}
       <TreeHeader 
         onSearch={handleSearch}
         onAddNote={handleAddNote}
         searchQuery={searchQuery}
       />
       
-      {/* Add Note Modal */}
       <Dialog open={isAddNoteOpen} onOpenChange={setAddNoteOpen}>
         <AddNoteModal onClose={() => setAddNoteOpen(false)} onAddNote={handleAddNoteSubmit} />
       </Dialog>
       
-      {/* Edit Note Modal */}
-      {/* Edit Note Modal */}
-{editingNode && (
-  <Dialog open={isEditNoteOpen} onOpenChange={setEditNoteOpen}>
-    <EditNoteModal
-      onClose={() => setEditNoteOpen(false)}
-      onEditNote={handleEditNoteSubmit}
-      initialValues={{
-        name: String(editingNode.data.label || ''),
-        content: String(editingNode.data.description || ''),
-        color: String(editingNode.data.color || 'red'),
-        tag: String(editingNode.data.tag || ''),
-        imageUrl: editingNode.data.imageUrl ? String(editingNode.data.imageUrl) : undefined,
-      }}
-    />
-  </Dialog>
-)}
+      {editingNode && (
+        <Dialog open={isEditNoteOpen} onOpenChange={setEditNoteOpen}>
+          <EditNoteModal
+            onClose={() => setEditNoteOpen(false)}
+            onEditNote={handleEditNoteSubmit}
+            initialValues={{
+              name: String(editingNode.data.label || ''),
+              content: String(editingNode.data.description || ''),
+              color: String(editingNode.data.color || 'red'),
+              tag: String(editingNode.data.tag || ''),
+              imageUrl: editingNode.data.imageUrl ? String(editingNode.data.imageUrl) : undefined,
+            }}
+          />
+        </Dialog>
+      )}
       
-      {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
         isOpen={isDeleteDialogOpen}
         onClose={() => {
@@ -385,7 +477,6 @@ const KnowledgeTree = () => {
         noteName={String(deletingNode?.data.label || '')}
       />
       
-      {/* ReactFlow Tree */}
       <div className="pt-20 h-full">
         <ReactFlow
           nodes={nodes.map(node => ({
@@ -401,6 +492,7 @@ const KnowledgeTree = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onEdgesDelete={onEdgesDelete}
           onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           fitView

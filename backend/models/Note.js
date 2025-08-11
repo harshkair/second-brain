@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-// Existing Note Schema
+// Note Schema
 const noteSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -86,4 +86,4 @@ edgeSchema.index({ target: 1 });
 const Note = mongoose.model('Note', noteSchema);
 const Edge = mongoose.model('Edge', edgeSchema);
 
-module.exports = { Note, Edge };
+export { Note, Edge };
