@@ -29,109 +29,19 @@ const nodeTypes = {
   adjacent: AdjacentNode,
 };
 
-// Sample data for demonstration
-const initialNodes: Node[] = [
-  {
-    id: '1',
-    type: 'central',
-    position: { x: 400, y: 300 },
-    data: { 
-      label: 'Artificial Intelligence',
-      description: 'Core knowledge area'
-    },
-  },
-  {
-    id: '2',
-    type: 'sub',
-    position: { x: 100, y: 200 },
-    data: { 
-      label: 'Machine Learning',
-      type: 'subtopic'
-    },
-  },
-  {
-    id: '3',
-    type: 'sub',
-    position: { x: 100, y: 400 },
-    data: { 
-      label: 'Neural Networks',
-      type: 'subtopic'
-    },
-  },
-  {
-    id: '4',
-    type: 'sub',
-    position: { x: 700, y: 200 },
-    data: { 
-      label: 'Computer Vision',
-      type: 'subtopic'
-    },
-  },
-  {
-    id: '5',
-    type: 'sub',
-    position: { x: 700, y: 400 },
-    data: { 
-      label: 'Natural Language',
-      type: 'subtopic'
-    },
-  },
-  {
-    id: '6',
-    type: 'adjacent',
-    position: { x: 400, y: 100 },
-    data: { 
-      label: 'Data Science',
-      category: 'related field'
-    },
-  },
-  {
-    id: '7',
-    type: 'adjacent',
-    position: { x: 400, y: 500 },
-    data: { 
-      label: 'Robotics',
-      category: 'related field'
-    },
-  },
-  {
-    id: '8',
-    type: 'adjacent',
-    position: { x: 0, y: 300 },
-    data: { 
-      label: 'Mathematics',
-      category: 'foundation'
-    },
-  },
-  {
-    id: '9',
-    type: 'adjacent',
-    position: { x: 800, y: 300 },
-    data: { 
-      label: 'Philosophy',
-      category: 'related field'
-    },
-  },
-];
-
-const initialEdges: Edge[] = [
-  { id: 'e1-2', source: '1', target: '2', style: { stroke: 'hsl(var(--tree-connection))', strokeWidth: 2 } },
-  { id: 'e1-3', source: '1', target: '3', style: { stroke: 'hsl(var(--tree-connection))', strokeWidth: 2 } },
-  { id: 'e1-4', source: '1', target: '4', style: { stroke: 'hsl(var(--tree-connection))', strokeWidth: 2 } },
-  { id: 'e1-5', source: '1', target: '5', style: { stroke: 'hsl(var(--tree-connection))', strokeWidth: 2 } },
-  { id: 'e1-6', source: '1', target: '6', style: { stroke: 'hsl(var(--tree-connection))', strokeWidth: 1 } },
-  { id: 'e1-7', source: '1', target: '7', style: { stroke: 'hsl(var(--tree-connection))', strokeWidth: 1 } },
-  { id: 'e8-1', source: '8', target: '1', style: { stroke: 'hsl(var(--tree-connection))', strokeWidth: 1 } },
-  { id: 'e1-9', source: '1', target: '9', style: { stroke: 'hsl(var(--tree-connection))', strokeWidth: 1 } },
-];
+// Default position calculator for new nodes
+const calculateDefaultPosition = (existingNodes: Node[]) => ({
+  x: 400,
+  y: 350 + existingNodes.length * 60
+});
 
 const KnowledgeTree = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]); // Start empty
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
   const [isAddNoteOpen, setAddNoteOpen] = useState(false);
-  const [isEditNoteOpen, setEditNoteOpen] =  useState(false);
+  const [isEditNoteOpen, setEditNoteOpen] = useState(false);
   const [editingNode, setEditingNode] = useState<Node | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingNode, setDeletingNode] = useState<Node | null>(null);
@@ -140,14 +50,20 @@ const KnowledgeTree = () => {
 
   // Fetch notes from backend on mount
   useEffect(() => {
-    setLoading(true);
-    fetchNotes()
-      .then(fetchedNotes => {
+    const loadNotes = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const fetchedNotes = await fetchNotes();
         console.log('Fetched notes:', fetchedNotes); // Debug log
-        setNodes(fetchedNotes.map((note, index) => ({
+        
+        const transformedNodes = fetchedNotes.map((note, index) => ({
           id: note._id,
-          type: 'sub',
-          position: note.position && typeof note.position.x === 'number' && typeof note.position.y === 'number' 
+          type: 'sub' as const,
+          position: note.position && 
+                   typeof note.position.x === 'number' && 
+                   typeof note.position.y === 'number' 
             ? note.position 
             : { x: 400, y: 350 + index * 60 },
           data: {
@@ -158,25 +74,38 @@ const KnowledgeTree = () => {
             imageUrl: note.imageUrl,
             type: 'subtopic',
           },
-        })));
-        setLoading(false);
-      })
-      .catch(err => {
+        }));
+        
+        setNodes(transformedNodes);
+      } catch (err) {
         console.error('Error fetching notes:', err);
         setError('Failed to fetch notes');
+        toast({
+          title: "Load failed",
+          description: "Could not load notes from database",
+          variant: "destructive"
+        });
+      } finally {
         setLoading(false);
-      });
-  }, []);
+      }
+    };
+
+    loadNotes();
+  }, [setNodes, toast]);
 
   // Add note handler
-  const handleAddNoteSubmit = async (data: { name: string; content: string; color: string; tag: string; imageUrl?: string }) => {
+  const handleAddNoteSubmit = async (data: { 
+    name: string; 
+    content: string; 
+    color: string; 
+    tag: string; 
+    imageUrl?: string 
+  }) => {
     setLoading(true);
+    setError(null);
+    
     try {
-      // Calculate position based on current nodes count
-      const newPosition = { 
-        x: 400, 
-        y: 350 + nodes.length * 60 
-      };
+      const newPosition = calculateDefaultPosition(nodes);
       
       const note = await addNote({
         name: data.name,
@@ -187,37 +116,55 @@ const KnowledgeTree = () => {
         position: newPosition,
       });
       
-      // Use the position returned from the server, or fallback to calculated position
       const finalPosition = note.position || newPosition;
       
-      setNodes(prev => ([
-        ...prev,
-        {
-          id: note._id,
-          type: 'sub',
-          position: finalPosition,
-          data: {
-            label: note.name,
-            description: note.content,
-            color: note.color,
-            tag: note.tag,
-            imageUrl: note.imageUrl,
-            type: 'subtopic',
-          },
+      const newNode: Node = {
+        id: note._id,
+        type: 'sub',
+        position: finalPosition,
+        data: {
+          label: note.name,
+          description: note.content,
+          color: note.color,
+          tag: note.tag,
+          imageUrl: note.imageUrl,
+          type: 'subtopic',
         },
-      ]));
+      };
+      
+      setNodes(prev => [...prev, newNode]);
       setAddNoteOpen(false);
-      toast({ title: 'Note added', description: `Note "${data.name}" was added.` });
+      
+      toast({ 
+        title: 'Note added', 
+        description: `Note "${data.name}" was added successfully.` 
+      });
     } catch (err) {
+      console.error('Error adding note:', err);
       setError('Failed to add note');
+      toast({
+        title: "Add failed",
+        description: "Could not add the note",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Edit note handler
-  const handleEditNoteSubmit = async (data: { name: string; content: string; color: string; tag: string; imageUrl?: string }) => {
+  const handleEditNoteSubmit = async (data: { 
+    name: string; 
+    content: string; 
+    color: string; 
+    tag: string; 
+    imageUrl?: string 
+  }) => {
     if (!editingNode) return;
+    
     setLoading(true);
+    setError(null);
+    
     try {
       const note = await updateNote(editingNode.id, {
         name: data.name,
@@ -227,6 +174,7 @@ const KnowledgeTree = () => {
         imageUrl: data.imageUrl,
         position: editingNode.position,
       });
+      
       setNodes(prev => prev.map(node =>
         node.id === editingNode.id
           ? {
@@ -242,16 +190,26 @@ const KnowledgeTree = () => {
             }
           : node
       ));
+      
       setEditNoteOpen(false);
       setEditingNode(null);
-      toast({ title: 'Note updated', description: `Note "${data.name}" was updated.` });
+      
+      toast({ 
+        title: 'Note updated', 
+        description: `Note "${data.name}" was updated successfully.` 
+      });
     } catch (err) {
+      console.error('Error updating note:', err);
       setError('Failed to update note');
+      toast({
+        title: "Update failed",
+        description: "Could not update the note",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
-
-
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -261,7 +219,6 @@ const KnowledgeTree = () => {
   // Handle node position updates when nodes are dragged
   const onNodeDragStop = useCallback(async (event: any, node: Node) => {
     try {
-      // Update the node position in the database
       await updateNote(node.id, {
         position: node.position
       });
@@ -274,11 +231,11 @@ const KnowledgeTree = () => {
         variant: "destructive"
       });
     }
-  }, []);
+  }, [toast]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
-    // TODO: Implement search functionality
+    // TODO: Implement search functionality with database
     if (query) {
       toast({
         title: "Search initiated",
@@ -292,20 +249,20 @@ const KnowledgeTree = () => {
   };
 
   const handleEditNode = (nodeId: string) => {
-    console.log('Edit node triggered for:', nodeId); // Debug log
+    console.log('Edit node triggered for:', nodeId);
     const node = nodes.find(n => n.id === nodeId);
     if (node) {
-      console.log('Opening edit modal for node:', node.data.label); // Debug log
+      console.log('Opening edit modal for node:', node.data.label);
       setEditingNode(node);
       setEditNoteOpen(true);
     }
   };
 
   const handleDeleteNode = (nodeId: string) => {
-    console.log('Delete node triggered for:', nodeId); // Debug log
+    console.log('Delete node triggered for:', nodeId);
     const node = nodes.find(n => n.id === nodeId);
     if (node) {
-      console.log('Opening delete dialog for node:', node.data.label); // Debug log
+      console.log('Opening delete dialog for node:', node.data.label);
       setDeletingNode(node);
       setIsDeleteDialogOpen(true);
     }
@@ -315,35 +272,67 @@ const KnowledgeTree = () => {
     if (!deletingNode) return;
     
     setLoading(true);
+    setError(null);
+    
     try {
       await deleteNote(deletingNode.id);
       
-      // Remove the node from the local state
       setNodes(prev => prev.filter(node => node.id !== deletingNode.id));
       
       toast({ 
         title: 'Note deleted', 
-        description: `Note "${deletingNode.data.label}" was deleted.` 
+        description: `Note "${deletingNode.data.label}" was deleted successfully.` 
       });
       
       setIsDeleteDialogOpen(false);
       setDeletingNode(null);
     } catch (err) {
+      console.error('Error deleting note:', err);
       setError('Failed to delete note');
       toast({
         title: "Delete failed",
         description: "Could not delete the note",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
+
+  // Loading state
+  if (loading && nodes.length === 0) {
+    return (
+      <div className="w-full h-screen bg-tree-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your knowledge tree...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && nodes.length === 0) {
+    return (
+      <div className="w-full h-screen bg-tree-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive mb-4">Failed to load knowledge tree</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-screen bg-tree-background relative">
       {/* Debug info - remove in production */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="absolute top-0 right-0 z-50 bg-black/80 text-white p-2 text-xs max-w-xs">
+        <div className="absolute bottom-0 right-0 z-50 bg-black/80 text-white p-2 text-xs max-w-xs">
           <div>Nodes: {nodes.length}</div>
           <div>Loading: {loading ? 'Yes' : 'No'}</div>
           <div>Error: {error || 'None'}</div>
@@ -361,25 +350,29 @@ const KnowledgeTree = () => {
         onAddNote={handleAddNote}
         searchQuery={searchQuery}
       />
+      
       {/* Add Note Modal */}
       <Dialog open={isAddNoteOpen} onOpenChange={setAddNoteOpen}>
         <AddNoteModal onClose={() => setAddNoteOpen(false)} onAddNote={handleAddNoteSubmit} />
       </Dialog>
+      
       {/* Edit Note Modal */}
-      {editingNode && (
-        <Dialog open={isEditNoteOpen} onOpenChange={setEditNoteOpen}>
-          <EditNoteModal
-            onClose={() => setEditNoteOpen(false)}
-            onEditNote={handleEditNoteSubmit}
-            initialValues={{
-              name: editingNode.data.label,
-              content: editingNode.data.description,
-              color: editingNode.data.color || 'red',
-              tag: editingNode.data.tag || '',
-            }}
-          />
-        </Dialog>
-      )}
+      {/* Edit Note Modal */}
+{editingNode && (
+  <Dialog open={isEditNoteOpen} onOpenChange={setEditNoteOpen}>
+    <EditNoteModal
+      onClose={() => setEditNoteOpen(false)}
+      onEditNote={handleEditNoteSubmit}
+      initialValues={{
+        name: String(editingNode.data.label || ''),
+        content: String(editingNode.data.description || ''),
+        color: String(editingNode.data.color || 'red'),
+        tag: String(editingNode.data.tag || ''),
+        imageUrl: editingNode.data.imageUrl ? String(editingNode.data.imageUrl) : undefined,
+      }}
+    />
+  </Dialog>
+)}
       
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
@@ -389,8 +382,9 @@ const KnowledgeTree = () => {
           setDeletingNode(null);
         }}
         onConfirm={handleConfirmDelete}
-        noteName={deletingNode?.data.label || ''}
+        noteName={String(deletingNode?.data.label || '')}
       />
+      
       {/* ReactFlow Tree */}
       <div className="pt-20 h-full">
         <ReactFlow
