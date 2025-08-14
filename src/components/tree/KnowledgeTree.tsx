@@ -9,6 +9,7 @@ import {
   Connection,
   Node,
   Edge,
+  ResizeParams
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -89,17 +90,23 @@ const KnowledgeTree = () => {
           id: note._id,
           type: 'sub' as const,
           position: note.position && 
-                   typeof note.position.x === 'number' && 
-                   typeof note.position.y === 'number' 
+                  typeof note.position.x === 'number' && 
+                  typeof note.position.y === 'number' 
             ? note.position 
             : { x: 400, y: 350 + index * 60 },
+          // Add width and height if they exist
+          width: note.width || undefined,
+          height: note.height || undefined,
+          style: {
+            width: note.width || undefined,
+            height: note.height || undefined,
+          },
           data: {
             label: note.name,
             description: note.content,
             color: note.color,
             tag: note.tag,
             imageUrl: note.imageUrl,
-            type: 'subtopic',
           },
         }));
         
@@ -330,6 +337,57 @@ const KnowledgeTree = () => {
     }
   }, [toast]);
 
+  const onNodesChangeWithResize = useCallback(async (changes: any[]) => {
+    onNodesChange(changes);
+    
+    // Then handle resize changes specifically
+    const resizeChanges = changes.filter(change => 
+      change.type === 'dimensions' && change.dimensions
+    );
+    
+    // Process each resize change
+    for (const change of resizeChanges) {
+      try {
+        const { id, dimensions } = change;
+        const { width, height } = dimensions;
+        
+        console.log('Node resized:', id, { width, height });
+        
+        // Update the backend with new dimensions
+        await updateNote(id, {
+          width: Math.round(width),
+          height: Math.round(height)
+        });
+        
+        console.log('Node dimensions saved to backend:', id, { width, height });
+        
+        // Update local node state to persist the dimensions
+        setNodes(prev => prev.map(node =>
+          node.id === id
+            ? {
+                ...node,
+                width: Math.round(width),
+                height: Math.round(height),
+                style: {
+                  ...node.style,
+                  width: Math.round(width),
+                  height: Math.round(height),
+                }
+              }
+            : node
+        ));
+        
+      } catch (err) {
+        console.error('Failed to update node dimensions:', err);
+        toast({
+          title: "Resize save failed",
+          description: `Could not save new dimensions for node`,
+          variant: "destructive"
+        });
+      }
+    }
+  }, [onNodesChange, setNodes, toast]);
+
   const handleSearch = (query: string) => {
     setSearchQuery(query);
     if (query) {
@@ -479,27 +537,27 @@ const KnowledgeTree = () => {
       
       <div className="pt-20 h-full">
         <ReactFlow
-          nodes={nodes.map(node => ({
-            ...node,
-            data: {
-              ...node.data,
-              onEdit: handleEditNode,
-              onDelete: handleDeleteNode,
-              id: node.id
-            }
-          }))}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onEdgesDelete={onEdgesDelete}
-          onNodeDragStop={onNodeDragStop}
-          nodeTypes={nodeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
-          className="bg-tree-background"
-          proOptions={{ hideAttribution: true }}
-        >
+            nodes={nodes.map(node => ({
+              ...node,
+              data: {
+                ...node.data,
+                onEdit: handleEditNode,
+                onDelete: handleDeleteNode,
+                id: node.id
+              }
+            }))}
+            edges={edges}
+            onNodesChange={onNodesChangeWithResize}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onEdgesDelete={onEdgesDelete}
+            onNodeDragStop={onNodeDragStop}
+            nodeTypes={nodeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+            className="bg-tree-background"
+            proOptions={{ hideAttribution: true }}
+       >
           <Controls className="bg-card border border-border" />
           <Background 
             color="hsl(var(--tree-connection))" 

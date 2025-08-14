@@ -11,6 +11,8 @@ export interface Note {
   };
   createdAt?: string;
   updatedAt?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface CreateNoteRequest {
@@ -23,6 +25,8 @@ export interface CreateNoteRequest {
     x: number;
     y: number;
   };
+  width?: number;
+  height?: number;
 }
 
 export interface UpdateNoteRequest {
@@ -35,6 +39,8 @@ export interface UpdateNoteRequest {
     x: number;
     y: number;
   };
+  width?: number;
+  height?: number;
 }
 
 export interface ApiResponse<T> {

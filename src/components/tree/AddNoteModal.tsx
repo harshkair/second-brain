@@ -81,24 +81,45 @@ export default function AddNoteModal({ onClose, onAddNote }: AddNoteModalProps) 
           </FormItem>
           <FormItem>
             <FormLabel>Color</FormLabel>
-            <RadioGroup value={color} onValueChange={val => setValue('color', val)} className="flex gap-4 mt-2">
+            <div className="flex gap-3 mt-2">
               {colorOptions.map(opt => (
-                <div key={opt.value} className="flex items-center">
-                  <label 
-                    htmlFor={opt.value} 
-                    className="cursor-pointer"
-                  >
-                    <RadioGroupItem 
-                      value={opt.value} 
-                      id={opt.value}
-                      className={`w-6 h-6 border-2 ${color === opt.value ? 'ring-2 ring-offset-2 ring-black-400' : ''}`}
-                      style={{ backgroundColor: opt.color, borderColor: 'white' }}
-                    />
-                  </label>
-                </div>
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    setValue('color', opt.value);
+                    console.log('Color selected:', opt.value); // Debug log
+                  }}
+                  className={`w-8 h-8 rounded-full border-4 transition-all duration-200 flex items-center justify-center focus:outline-none ${
+                    color === opt.value 
+                      ? 'border-white shadow-lg ring-2 ring-gray-800 ring-offset-2 scale-110' 
+                      : 'border-gray-400 hover:border-gray-600 hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: opt.color }}
+                  aria-label={`Select ${opt.label} color`}
+                >
+                  {/* More visible selection indicator */}
+                  {color === opt.value && (
+                    <div className="w-0 h-0 bg-white rounded-full shadow-md border border-gray-300"></div>
+                  )}
+                </button>
               ))}
-            </RadioGroup>
+            </div>
+            {/* Debug display - remove this after testing */}
+            <div className="text-xs text-gray-500 mt-2">
+              Selected: {color}
+            </div>
+            <input
+              type="hidden"
+              {...register('color')}
+              value={color}
+            />
           </FormItem>
+          {/* <div className="p-2 bg-gray-100 rounded text-sm">     Debugging info for color
+            <strong>Debug:</strong> Current selected color: {color}
+            <br />
+            <strong>Form values:</strong> {JSON.stringify(watch())}
+          </div> */}
           <FormItem>
             <FormLabel>Tag</FormLabel>
             <Select value={watch('tag')} onValueChange={val => setValue('tag', val)}>
