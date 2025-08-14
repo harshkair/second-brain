@@ -15,11 +15,11 @@ interface AddNoteModalProps {
 }
 
 const colorOptions = [
-  { value: 'red', label: 'Red' },
-  { value: 'blue', label: 'Blue' },
-  { value: 'purple', label: 'Purple' },
-  { value: 'green', label: 'Green' },
-  { value: 'yellow', label: 'Yellow' },
+  { value: 'red', color: '#ef4444', label: 'Red' },
+  { value: 'blue', color: '#3b82f6', label: 'Blue' },
+  { value: 'green', color: '#1db981', label: 'Green' },
+  { value: 'purple', color: '#8b5cf6', label: 'Purple' },  
+  { value: 'yellow', color: '#eab308', label: 'Yellow' }, 
 ];
 
 const tagOptions = [
@@ -83,10 +83,19 @@ export default function AddNoteModal({ onClose, onAddNote }: AddNoteModalProps) 
             <FormLabel>Color</FormLabel>
             <RadioGroup value={color} onValueChange={val => setValue('color', val)} className="flex gap-4 mt-2">
               {colorOptions.map(opt => (
-                <RadioGroupItem key={opt.value} value={opt.value} className={`border-2 flex items-center ${color === opt.value ? 'ring-2 ring-offset-2' : ''}`}> 
-                  <span className="inline-block w-4 h-4 rounded-full mr-2" style={{ backgroundColor: opt.value }} />
-                  {opt.label}
-                </RadioGroupItem>
+                <div key={opt.value} className="flex items-center">
+                  <label 
+                    htmlFor={opt.value} 
+                    className="cursor-pointer"
+                  >
+                    <RadioGroupItem 
+                      value={opt.value} 
+                      id={opt.value}
+                      className={`w-6 h-6 border-2 ${color === opt.value ? 'ring-2 ring-offset-2 ring-black-400' : ''}`}
+                      style={{ backgroundColor: opt.color, borderColor: 'white' }}
+                    />
+                  </label>
+                </div>
               ))}
             </RadioGroup>
           </FormItem>
@@ -118,4 +127,4 @@ export default function AddNoteModal({ onClose, onAddNote }: AddNoteModalProps) 
       </FormProvider>
     </DialogContent>
   );
-} 
+}
